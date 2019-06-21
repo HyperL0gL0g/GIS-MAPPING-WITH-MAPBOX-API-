@@ -1,0 +1,245 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset='utf-8' />
+    <title>Measure distances</title>
+    <meta name='viewport' content='initial-scale=1,maximum-scale=1,user-scalable=no' />
+    <script src='https://api.tiles.mapbox.com/mapbox-gl-js/v1.0.0/mapbox-gl.js'></script>
+    <link href='https://api.tiles.mapbox.com/mapbox-gl-js/v1.0.0/mapbox-gl.css' rel='stylesheet' />
+    <style>
+        body { margin:0; padding:0; }
+        #map { position:absolute; top:0; bottom:0; width:100%; }
+    </style>
+</head>
+<body>
+
+<style>
+.distance-container {
+    position: absolute;
+    top: 10px;
+    left: 10px;
+    z-index: 1;
+}
+
+.distance-container > * {
+    background-color: rgba(0, 0, 0, 0.5);
+    color: #fff;
+    font-size: 11px;
+    line-height: 18px;
+    display: block;
+    margin: 0;
+    padding: 5px 10px;
+    border-radius: 3px;
+}
+</style>
+
+<script src='https://api.tiles.mapbox.com/mapbox.js/plugins/turf/v3.0.11/turf.min.js'></script>
+<script src='https://api.mapbox.com/mapbox-gl-js/plugins/mapbox-gl-draw/v1.0.9/mapbox-gl-draw.js'></script>
+<link rel='stylesheet' href='https://api.mapbox.com/mapbox-gl-js/plugins/mapbox-gl-draw/v1.0.9/mapbox-gl-draw.css' type='text/css'/>
+
+<div id='map'></div>
+<div id='distance' class='distance-container'></div>
+
+<script src='https://api.mapbox.com/mapbox.js/plugins/turf/v2.0.2/turf.min.js'></script>
+<script>
+mapboxgl.accessToken = 'pk.eyJ1IjoiYWJoaW5hdmdob3NoIiwiYSI6ImNqd3Fkb3I2cDMwaW40OW8ycnB3YWY1Z3kifQ._v2cU5ke1opfkl0GL4uKpA';
+var map = new mapboxgl.Map({
+    container: 'map',
+    style: 'mapbox://styles/mapbox/streets-v11',
+    center: [88.3628, 26.9287],
+    zoom: 12
+});
+
+var draw = new MapboxDraw({
+    displayControlsDefault: true,
+    controls: {
+        polygon: true,
+        trash: true
+    }
+});
+map.addControl(draw);
+
+
+
+
+
+var distanceContainer = document.getElementById('distance');
+
+// GeoJSON object to hold our measurement features
+var geojson = {
+    "type": "FeatureCollection",
+    "features": []
+};
+
+// Used to draw a line between points
+var linestring = {
+    "type": "Feature",
+    "geometry": {
+        "type": "LineString",
+        "coordinates": []
+    }
+};
+
+
+
+var arr_elev = new Set();
+
+function sendreq(arr){
+    var http = new XMLHttpRequest();
+    var url = 'https://elevation-api.io/api/elevation?points=(' + arr[1].toString() +',' + arr[0].toString()+')';
+    http.open("GET",url,true);
+    http.responseType = 'json';
+    //http.open("GET",'js_req.html');
+    http.send();
+    return http;
+    //var str;
+
+   //return str;
+}
+
+
+
+var len = 0
+map.on('load', function() {
+
+    map.addSource('geojson', {
+        "type": "geojson",
+        "data": geojson
+    });
+
+
+
+    // Add styles to the map
+    map.addLayer({
+        id: 'measure-points',
+        type: 'circle', 
+       source: 'geojson',
+        paint: {
+            'circle-radius': 5,
+            'circle-color': '#000'
+        },
+        filter: ['in', '$type', 'Point']
+    });
+    map.addLayer({
+        id: 'measure-lines',
+        type: 'line',
+        source: 'geojson',
+        layout: {
+            'line-cap': 'round',
+            'line-join': 'round'
+        },
+        paint: {
+            'line-color': '#000',
+           'line-width': 2.5
+        },
+        filter: ['in', '$type', 'LineString']
+    });
+    map.on('click', function(e) {
+        var features = map.queryRenderedFeatures(e.point, { layers: ['measure-points'] });
+        
+        // Remove the linestring from the group
+        // So we can redraw it based on the points collection
+        if (geojson.features.length > 1){
+             geojson.features.pop();
+         }
+        // Clear the Distance container to populate it with a new value
+        distanceContainer.innerHTML = '';
+
+        // If a feature was clicked, remove it from the map
+        if (features.length) {
+            var id = features[0].properties.id;
+            geojson.features = geojson.features.filter(function(point) {
+                return point.properties.id !== id;
+            });
+        } else {
+            var point = {
+                "type": "Feature",
+                "geometry": {
+                    "type": "Point",
+                    "coordinates": [
+                        e.lngLat.lng,
+                        e.lngLat.lat
+                    ]
+                },
+                "properties": {
+                    "id": String(new Date().getTime())
+                }
+            };
+
+            geojson.features.push(point);
+           
+           /* console.log(*///console.log((str));//);
+        }
+
+        if (geojson.features.length > 1) {
+            linestring.geometry.coordinates = geojson.features.map(function(point) {
+                return point.geometry.coordinates;
+            });
+            var str1 = "";
+            var str2 = "";
+            geojson.features.push(linestring);
+            len = linestring.geometry.coordinates.length;
+            //console.log(linestring.geometry.coordinates);
+           // var pt1 = 
+           var jSON1;
+           var jSON2;
+           var pt1 = linestring.geometry.coordinates[len - 2];
+           var Http1 = sendreq(pt1);
+           //console.log(JSON.parse(sendreq(e.lngLat.lat,e.lngLat.lng)));
+           Http1.onload = function(){
+                jSON1 = Http1.response;
+                console.log("elevation(in metres) : "+ jSON1.elevations[0].elevation);
+           };
+           //var jSON1 = Http1.onload;
+           //console.log(jSON1);
+            //console.log(len);
+           //console.log(linestring.geometry.coordinates[]);
+          var pt2 = linestring.geometry.coordinates[len-1];
+          var Http2 = sendreq(pt2);
+          //console.log("after");
+            Http2.onload = function(){
+                   
+                    jSON2 = Http2.response;
+                   
+                    console.log("elevation(in metres) : " + jSON2.elevations[0].elevation);
+           };
+          // 
+          var dist = turf.distance(turf.point(pt1),turf.point(pt2));
+          var value = document.createElement('pre');
+           value.textContent = 'Total distance: ' + dist.toLocaleString() + 'km';
+            
+            /***small business logic: if length of the linestring > 10 km then discard it***/
+            distanceContainer.appendChild(value);
+           function myCalc(){
+            //console.log(jSON2);
+            var del_z = Math.abs(jSON1.elevations[0].elevation - jSON2.elevations[0].elevation);
+            var angle = Math.atan(del_z/(dist*1000));
+            console.log("distance(ignoring elevation): " + dist +'km');
+            console.log("distance(considering elevation): " + (dist/Math.cos(angle)) + 'km');
+            
+            console.log("angle of elevation :(in degrees)" + (180/Math.PI)*angle);
+            console.log("error in distance(in kms) :" + Math.abs((dist/Math.cos(angle)) - dist));
+           
+        }
+          setTimeout(myCalc,3000);
+          
+          // Populate the distanceContainer with total distance
+         
+        }
+        // https://elevation-api.io/api/elevation?points=(27.418100119832886,81.09283447265626)
+        //for( var i of geojson.features)
+        //console.log(geojson.features);
+        map.getSource('geojson').setData(geojson);
+    });
+});
+
+map.on('mousemove', function (e) {
+    var features = map.queryRenderedFeatures(e.point, { layers: ['measure-points'] });
+    // UI indicator for clicking/hovering a point on the map
+    map.getCanvas().style.cursor = (features.length) ? 'pointer' : 'crosshair';
+});
+
+</script>
+
+</body>
+</html>
